@@ -1,0 +1,10 @@
+.eggs/
+.cache/
+dist/
+.tox/
+.idea/
+*.pyc
+.venv
+*.egg-info
+ChangeLog
+AUTHORS

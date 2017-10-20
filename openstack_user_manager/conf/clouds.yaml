@@ -1,0 +1,12 @@
+clouds:
+  cloud-admin:
+    auth:
+      auth_url: http://<controller_hostname>:35357/v3
+      password: <password>
+      project_domain_name: default
+      project_name: admin
+      user_domain_name: default
+      username: admin
+    domain_name: Default
+    identity_api_version: '3'
+    region_name: RegionOne
