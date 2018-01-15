@@ -20,6 +20,14 @@ from openstack import exceptions as o_exceptions
 from openstack_user_manager import log
 from os_client_config import config as cloud_config
 
+import datetime
+
+try:
+    from safirbillingclient import client as safirbilling_client
+    from safirbillingclient import exc as sb_exceptions
+except:
+    pass
+
 LOG = log.get_logger()
 
 INITIAL_CREDIT_AMOUNT=250
@@ -62,6 +70,19 @@ class OpenstackUserManager:
             session=cloud.get_session_client('network'))
         self.keystone_conn = keystone_client.Client(
             session=cloud.get_session_client('identity'))
+
+        try:
+            self.safirbilling_conn = safirbilling_client.Client(
+                '1',
+                cloud.get_endpoint('billing'),
+                session=cloud.get_session_client('billing'))
+        except o_exceptions.SDKException as ex:
+            LOG.error('Could connect to billing service. ' +
+                      ex.message)
+            self.safirbilling_conn = None
+        except Exception:
+            LOG.error('Could connect to billing service.')
+            self.safirbilling_conn = None
 
     def check_username_availability(self,
                                     user_name):
@@ -115,8 +136,95 @@ class OpenstackUserManager:
                               customer_name,
                               company_name,
                               email):
-        # NOTE: safirbilling service is not published on github yet
-        return False
+        if self.safirbilling_conn is None:
+            return False
+
+        try:
+            project = self.conn.identity.find_project(project_name)
+
+            # Add customer
+            self.safirbilling_conn.customer.set(project_id=project.id,
+                                                contact_name=customer_name,
+                                                company_name=company_name,
+                                                mail=email)
+
+            # Load initial credit
+            self.safirbilling_conn.credit.load(project_id=project.id,
+                                               amount=INITIAL_CREDIT_AMOUNT)
+
+            # Add rating role
+            user = self.conn.identity.find_user('cloudkitty')
+            if user is not None:
+                role = self.conn.identity.find_role('rating')
+                if role is not None:
+                    self.keystone_conn.roles.grant(role,
+                                                   user=user,
+                                                   project=project)
+
+            # Add billing role
+            user = self.conn.identity.find_user('safirbilling')
+            if user is not None:
+                role = self.conn.identity.find_role('billing')
+                if role is not None:
+                    self.keystone_conn.roles.grant(role,
+                                                   user=user,
+                                                   project=project)
+        except sb_exceptions.HTTPException as ex:
+            LOG.error("Billing customer not created. Error: " + ex.message)
+            return False
+        except Exception as ex:
+            LOG.error("Billing customer not created. Error: " + ex.message)
+            return False
+        return True
+
+    def get_billing_customer_status(self, project_id):
+        if self.safirbilling_conn is None:
+            return None
+
+        try:
+            customer = self.safirbilling_conn.customer.get(project_id=project_id)
+        except sb_exceptions.HTTPException as ex:
+            LOG.error("Billing customer not found. Error: " + ex.message)
+            return False
+        except Exception as ex:
+            LOG.error("Billing customer not found. Error: " + ex.message)
+            return False
+        return customer.status
+
+    def get_customer_termination_date(self, project_id):
+        if self.safirbilling_conn is None:
+            return None
+
+        # TODO: termination is now based on credit,
+        # it should be based on time
+        return datetime.date.today() + datetime.timedelta(days=15)
+
+    def get_project(self, project_name):
+        try:
+            project = self.conn.identity.find_project(project_name)
+        except o_exceptions.ResourceNotFound:
+            print('ERROR!!! Project ' + project_name + ' not found')
+            raise o_exceptions.ResourceNotFound
+        return project
+
+    def get_project_from_user(self, role_name, user_name):
+        role = self.conn.identity.find_role(role_name)
+        user = self.get_user(user_name)
+        ras = self.keystone_conn.role_assignments.list(user=user,
+                                                       role=role)
+        if len(ras) > 0:
+            project_id = ras[0].scope['project']['id']
+            return project_id
+        return None
+
+    def get_user(self, user_name):
+        try:
+            user = self.conn.identity.find_user(user_name,
+                                                ignore_missing=False)
+        except o_exceptions.ResourceNotFound:
+            print('ERROR!!! User ' + user_name + ' not found')
+            raise o_exceptions.ResourceNotFound
+        return user
 
     def pair_user_with_project(self, user_name, project_name, role_name):
         try:
