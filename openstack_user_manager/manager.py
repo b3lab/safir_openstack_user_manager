@@ -290,6 +290,7 @@ class OpenstackUserManager:
             # CREATE SUBNET
             subnet = self.conn.network.create_subnet(
                 name=subnet_name,
+                project_id=project.id,
                 network_id=net.id,
                 gateway_ip=subnet_gateway_ip,
                 enable_dhcp=True,
@@ -333,7 +334,6 @@ class OpenstackUserManager:
             project = self.conn.identity.find_project(project_name)
             default_sec_groups = self.conn.network.security_groups()
 
-            print(default_sec_groups)
             sec_group_id = None
             for sec_group in default_sec_groups:
                 if sec_group.project_id == project.id:
