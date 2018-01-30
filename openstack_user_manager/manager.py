@@ -182,6 +182,7 @@ class OpenstackUserManager:
             # CREATE SUBNET
             subnet = self.conn.network.create_subnet(
                 name=subnet_name,
+                project_id=project.id,
                 network_id=net.id,
                 gateway_ip=subnet_gateway_ip,
                 enable_dhcp=True,
