@@ -195,9 +195,21 @@ class OpenstackUserManager:
         if self.safirbilling_conn is None:
             return None
 
-        # TODO: termination is now based on credit,
-        # it should be based on time
-        return datetime.date.today() + datetime.timedelta(days=15)
+        try:
+            customer = self.safirbilling_conn.customer.get(project_id=project_id)
+            termination_time_limit = self.safirbilling_conn.config.get_termination_time_limit()
+            time_delta=int(termination_time_limit[0].value)
+            suspend_time = datetime.datetime.strptime(customer.suspend_time,
+                                                      "%Y-%m-%dT%H:%M:%S")
+            termination_date = (suspend_time +
+                                datetime.timedelta(days=time_delta))
+        except sb_exceptions.HTTPException as ex:
+            LOG.error("Billing customer not found. Error: " + ex.message)
+            return None
+        except Exception as ex:
+            LOG.error("Billing customer not found. Error: " + ex.message)
+            return None
+        return termination_date
 
     def get_project(self, project_name):
         try:
@@ -208,14 +220,20 @@ class OpenstackUserManager:
         return project
 
     def get_project_from_user(self, role_name, user_name):
-        role = self.conn.identity.find_role(role_name)
-        user = self.get_user(user_name)
-        ras = self.keystone_conn.role_assignments.list(user=user,
-                                                       role=role)
-        if len(ras) > 0:
-            project_id = ras[0].scope['project']['id']
-            return project_id
-        return None
+        project_id = None
+        try:
+            role = self.conn.identity.find_role(role_name)
+            user = self.get_user(user_name)
+            if user:
+                ras = self.keystone_conn.role_assignments.list(user=user,
+                                                               role=role)
+                if len(ras) > 0:
+                    project_id = ras[0].scope['project']['id']
+        except o_exceptions.ResourceNotFound:
+            project_id = None
+        except Exception:
+            project_id = None
+        return project_id
 
     def get_user(self, user_name):
         try:
