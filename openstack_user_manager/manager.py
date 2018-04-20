@@ -141,17 +141,34 @@ class OpenstackUserManager:
 
         try:
             project = self.conn.identity.find_project(project_name)
+        except sb_exceptions.HTTPException as ex:
+            LOG.error("Billing customer not created. Error: " + ex.message)
+            return False
+        except Exception as ex:
+            LOG.error("Billing customer not created. Error: " + ex.message)
+            return False
 
+        try:
             # Add customer
             self.safirbilling_conn.customer.set(project_id=project.id,
                                                 contact_name=customer_name,
                                                 company_name=company_name,
                                                 mail=email)
+        except sb_exceptions.HTTPException as ex:
+            pass
+        except Exception as ex:
+            pass
 
+        try:
             # Load initial credit
             self.safirbilling_conn.credit.load(project_id=project.id,
                                                amount=INITIAL_CREDIT_AMOUNT)
+        except sb_exceptions.HTTPException as ex:
+            pass
+        except Exception as ex:
+            pass
 
+        try:
             # Add rating role
             user = self.conn.identity.find_user('cloudkitty')
             if user is not None:
