@@ -336,21 +336,21 @@ class OpenstackUserManager:
             user_network = self.conn.network.find_network(external_network_name)
             # Find ext-network-id using by user_network object
             ext_net_id = user_network['id']
-            
+
             # Set ext-gateway-info parameter, this is need for create router func
             external_gateway_info = {"network_id": ext_net_id}
-            
+
             # Create router using by openstacksdk, not neutron client
             router = self.conn.network.create_router(
                 name=router_name,
                 project_id=project.id,
                 external_gateway_info=external_gateway_info,
                 admin_state_up=True)
-            
+
             # Add private network interface to router
             router = router.add_interface(
                    self.conn.network, subnet_id=subnet.id)
-            
+
         except n_exceptions.NeutronException as ex:
             LOG.error("Project's initial network could not be defined. "
                       "Error: " + str(ex.message))
@@ -385,3 +385,4 @@ class OpenstackUserManager:
             LOG.error("SSH rule not added. Error: " + ex.message)
             return False
         return True
+
